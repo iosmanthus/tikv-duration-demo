@@ -159,7 +159,7 @@ impl Duration {
 mod tests {
     use super::*;
     #[bench]
-    fn bench_parse(b: &mut test::Bencher) {
+    fn bench_master(b: &mut test::Bencher) {
         let cases = vec![
             ("12:34:56.1234", 0),
             ("12:34:56.789", 1),
