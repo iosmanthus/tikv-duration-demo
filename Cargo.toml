@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-  "issue-4025",
+  "pull-4427",
   "master",
   "regex",
   "dfa"
