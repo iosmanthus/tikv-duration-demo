@@ -3,6 +3,8 @@
 members = [
   "issue-4025",
   "master",
+  "regex",
+  "dfa"
 ]
 
 [profile.bench]
