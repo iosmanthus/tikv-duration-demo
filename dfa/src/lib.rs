@@ -78,34 +78,61 @@ fn check_fsp(fsp: i8) -> Result<u8> {
     Ok(fsp as u8)
 }
 
+#[derive(Clone, Copy)]
+struct DurationBuilder {
+    neg: bool,
+    hour: u64,
+    minute: u64,
+    second: u64,
+    nano: u64,
+    fsp: u8,
+    round_with_fsp: bool,
+}
+
+impl DurationBuilder {
+    pub fn check(self) -> Result<Self> {
+        check_hour(self.hour)?;
+        check_minute(self.minute)?;
+        check_second(self.second)?;
+        check_fsp(self.fsp as i8)?;
+        Ok(self)
+    }
+}
+
 impl Duration {
     #[inline]
     pub fn zero() -> Self {
         Duration(0)
     }
     #[inline]
-    fn with_detail(
-        neg: bool,
-        mut hour: u64,
-        mut minute: u64,
-        mut second: u64,
-        mut nano: u64,
-        fsp: u8,
-    ) -> Result<Duration> {
-        let round = u64::from(TEN_POW[NANO_WIDTH as usize - fsp as usize - 1]);
-        if nano / round % 10 > 4 {
-            let padding = round * 10;
-            nano = (nano / padding + 1) * padding;
+    fn build(builder: DurationBuilder) -> Result<Duration> {
+        let DurationBuilder {
+            neg,
+            mut hour,
+            mut minute,
+            mut second,
+            mut nano,
+            fsp,
+            round_with_fsp,
+        } = builder.check()?;
+
+        if round_with_fsp {
+            let round = u64::from(TEN_POW[NANO_WIDTH as usize - fsp as usize - 1]);
+            nano /= round;
+            nano = (nano + 5) / 10;
+            nano *= round * 10;
         }
 
-        second += nano / NANOS_PER_SEC;
-        minute += second / SECS_PER_MINUTE;
-        hour += minute / MINUTES_PER_HOUR;
-        check_hour(hour)?;
+        if nano >= NANOS_PER_SEC {
+            second += nano / NANOS_PER_SEC;
+            minute += second / SECS_PER_MINUTE;
+            hour += minute / MINUTES_PER_HOUR;
+            hour = check_hour(hour)?;
 
-        nano %= NANOS_PER_SEC;
-        second %= SECS_PER_MINUTE;
-        minute %= MINUTES_PER_HOUR;
+            nano %= NANOS_PER_SEC;
+            second %= SECS_PER_MINUTE;
+            minute %= MINUTES_PER_HOUR;
+        }
 
         let mut duration = Duration(0);
         duration.set_neg(neg);
@@ -141,7 +168,7 @@ impl Duration {
 
         let mut neg = false;
         let (mut block, mut day, mut hour, mut minute, mut second, mut fract) = (0, 0, 0, 0, 0, 0);
-        let mut eaten = 1;
+        let mut eaten = 0;
 
         let mut state = Start;
         for &c in s {
@@ -252,8 +279,16 @@ impl Duration {
                 }
                 Dot => {
                     if c.is_ascii_digit() {
-                        fract = to_dec(c);
-                        Fraction
+                        if fsp == 0 {
+                            if to_dec(c) > 4 {
+                                fract = 1;
+                            }
+                            Consume
+                        } else {
+                            fract = to_dec(c);
+                            eaten = 1;
+                            Fraction
+                        }
                     } else {
                         return Err(());
                     }
@@ -297,17 +332,47 @@ impl Duration {
         if state == MinuteColon || state == SecondColon {
             return Err(());
         }
+        if block != 0 {
+            second = block % 100;
+            minute = block / 100 % 100;
+            hour = block / 10000;
+        }
         hour += day * 24;
-        fract *= u64::from(TEN_POW[NANO_WIDTH as usize - fsp as usize]);
-        Duration::with_detail(neg, hour, minute, second, fract, fsp)
+        fract *= u64::from(TEN_POW[NANO_WIDTH as usize - eaten as usize]);
+        Duration::build(DurationBuilder {
+            neg,
+            hour,
+            minute,
+            second,
+            nano: fract,
+            fsp,
+            round_with_fsp: false,
+        })
+    }
+    pub fn round_frac(mut self, fsp: i8) -> Result<Self> {
+        let fsp = check_fsp(fsp)?;
+        if fsp >= self.fsp() {
+            self.set_fsp(fsp);
+            return Ok(self);
+        }
+
+        Duration::build(DurationBuilder {
+            neg: self.neg(),
+            hour: self.hour(),
+            minute: self.minute(),
+            second: self.second(),
+            nano: self.nano(),
+            fsp,
+            round_with_fsp: true,
+        })
     }
 }
 
 #[test]
 fn dbg_parse() {
-    match Duration::parse(b"10:10:1\xff", 0) {
+    match Duration::parse(b"11:30:45.123456", 6) {
         Ok(duration) => {
-            dbg!(duration);
+            dbg!(duration.round_frac(1).unwrap());
         }
         Err(_) => {
             dbg!("error");
