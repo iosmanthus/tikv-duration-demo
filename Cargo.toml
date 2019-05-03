@@ -4,7 +4,8 @@ members = [
   "pull-4427",
   "master",
   "regex",
-  "dfa"
+  "dfa",
+  "nom"
 ]
 
 [profile.bench]
