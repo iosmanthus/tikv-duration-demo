@@ -1,8 +1,9 @@
 [package]
-name = "nom"
+name = "duration-nom"
 version = "0.1.0"
 authors = ["iosmanthus <myosmanthustree@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-nom = { git = "https://github.com/iosmanthus/nom.git", branch = "fix-cond-reduce" }
+nom = { git = "https://github.com/iosmanthus/nom.git", branch = "fix-cond-reduce"}
+bitfield = "0.13.1"
